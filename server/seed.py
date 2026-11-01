@@ -1,40 +1,34 @@
 #!/usr/bin/env python3
+"""Replace the book catalog with 500 sample books when run as a script."""
 
-from random import randint, choice as rc
+import os
 
 from faker import Faker
-import os
-from app import create_app
-from models import db, Book
 
-fake = Faker()
+from config import create_app, db
+from models import Book
 
-env = os.getenv("FLASK_ENV", "dev")
-app = create_app(env)
 
-with app.app_context():
-
-    print("Deleting all books...")
-    Book.query.delete()
-
+def seed_books():
     fake = Faker()
+    app = create_app(os.getenv('FLASK_ENV', 'dev'))
 
-    print("Creating books...")
-    books = []
-    for i in range(500):
-        title = fake.sentence(nb_words=4)
-        author = fake.name()
-        description = fake.paragraph(nb_sentences=5)
-        
-        book = Book(
-            title=title,
-            author=author,
-            description=description
-        )
+    with app.app_context():
+        print('Deleting all books...')
+        Book.query.delete()
 
-        books.append(book)
+        print('Creating books...')
+        db.session.add_all([
+            Book(
+                title=fake.sentence(nb_words=4),
+                author=fake.name(),
+                description=fake.paragraph(nb_sentences=5),
+            )
+            for _ in range(500)
+        ])
+        db.session.commit()
+        print('Complete.')
 
-    db.session.add_all(books)
-    
-    db.session.commit()
-    print("Complete.")
+
+if __name__ == '__main__':
+    seed_books()

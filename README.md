@@ -1,122 +1,111 @@
-# Lab: Flask Pagination
+# Flask Pagination Lab
 
-## Introduction
+A Flask REST API that returns books in pages, with metadata clients can use to
+navigate the catalog. Built with Flask-RESTful, Flask-SQLAlchemy, Marshmallow,
+and SQLite. This project is an API; it does not include a frontend.
 
-In this lab, you'll add server-side pagination to an existing Flask API endpoint. Right now, your API returns all books when a client makes a request to /books. That’s fine with 10 entries, but in production systems, this approach can slow down your app and flood the frontend with too much data.
+## Setup
 
-Your goal is to refactor the endpoint to:
-
-* Accept `?page` and `?per_page` query parameters
-* Return only a subset of records
-* Include metadata (like total, page, total_pages) in the response
-
-This mirrors the structure used by APIs across the web from Shopify to Reddit to GitHub.
-
-## Tools & Resources
-
-- [GitHub Repo](https://github.com/learn-co-curriculum/flask-pagination-lab)
-- [Flask SQLAlchemy Docs - paginate](https://flask-sqlalchemy.readthedocs.io/en/stable/pagination/)
-
-## Set Up
-
-The starter code includes a Flask app and seed data for books.
-
-To get started:
+The Pipfile targets Python 3.8.13. Install that version and Pipenv, then run
+these commands from the repository root:
 
 ```bash
-pipenv install && pipenv shell
-cd server
-flask db init
-flask db migrate -m "initial migration"
-flask db upgrade head
-python seed.py
-python app.py
+pipenv sync
+pipenv run flask --app server/app.py init-db
+pipenv run python server/seed.py
+pipenv run python server/app.py
 ```
 
-You can view the API in your browser or using Postman. Test pagination by visiting
-http://localhost:5555/books?page=1&per_page=5.
+The API runs at http://localhost:5555. The development database is stored at
+`server/instance/app.db` and is ignored by Git. `init-db` creates missing tables
+and can be rerun without deleting books. The optional seed script **replaces
+all existing books** with 500 sample records; run it only for sample data.
 
-## Instructions
+To use an already installed compatible Python version, create a virtual
+environment and install the existing locked dependencies:
 
-### Task 1: Define the Problem
+```bash
+python3 -m venv .venv
+pipenv requirements --hash > /tmp/flask-pagination-requirements.txt
+.venv/bin/python -m pip install --require-hashes -r /tmp/flask-pagination-requirements.txt
+.venv/bin/python -m flask --app server/app.py init-db
+.venv/bin/python server/seed.py
+.venv/bin/python server/app.py
+```
 
-Your current /books endpoint returns every book in the database. The frontend team wants this replaced with a paginated response that:
+The requirements export is temporary; `Pipfile.lock` remains the dependency source.
 
-* Uses page and per_page query parameters
-* Returns only the requested chunk of data
-* Includes metadata like the total number of pages
+## Books API
 
-### Task 2: Determine the Design
+```bash
+curl 'http://localhost:5555/books?page=2&per_page=3'
+```
 
-Backend Requirements:
-* Accept `?page=<int>` and `?per_page=<int>` via `request.args`
-* Use `.paginate()` on your SQLAlchemy query
-* Return a structured JSON response like:
+`GET /books` returns HTTP 200 with this structure (example for 20 books):
 
 ```json
 {
-  "page": 1,
-  "per_page": 5,
-  "total": 30,
-  "total_pages": 6,
+  "page": 2,
+  "per_page": 3,
+  "total": 20,
+  "total_pages": 7,
   "items": [
-    { "id": 1, "title": "Apple Pie" },
-    // ...
+    {"id": 4, "title": "Book 4", "author": "Author", "description": null},
+    {"id": 5, "title": "Book 5", "author": "Author", "description": null},
+    {"id": 6, "title": "Book 6", "author": "Author", "description": null}
   ]
 }
 ```
 
-### Task 3: Develop, Test, and Refine the Code
+| Parameter | Default | Behavior |
+| --- | --- | --- |
+| `page` | `1` | Positive integer; invalid, empty, zero, or negative values use `1`. |
+| `per_page` | `5` | Positive integer; invalid, empty, zero, or negative values use `5`. Values over `100` are capped at `100`. |
 
-#### Step 1: Accept Query Parameters
+Books are ordered by ascending ID so pages are consistent for an unchanged
+catalog. A page beyond the last page returns `items: []` while retaining the
+requested page and catalog totals. An empty database returns `total: 0` and
+`total_pages: 0`. Author and description may be `null`.
 
-* page
-* per_page
+The implementation uses SQLAlchemy pagination to fetch only the requested page,
+rather than loading the entire catalog into memory. See the
+[Flask-SQLAlchemy pagination documentation](https://flask-sqlalchemy.readthedocs.io/en/stable/pagination/).
 
-#### Step 2: Use .paginate() in Your Query
+## Tests
 
-Use the SQLAlchemy `.paginate()` method to get the correct books by the query params.
-
-#### Step 3: Return a Structured Response
-
-Format response with the proper metadata:
-* page
-* per_page
-* total
-* total_pages
-* items
-
-#### Step 4: Test the Pagination Logic
-
-Test routes in browser or Postman. Run the test suite with:
-```bash
-pytest
-```
-
-#### Step 5: Commit and Push Git History
-
-* Commit and push your code:
+From the repository root:
 
 ```bash
-git add .
-git commit -m "final solution"
-git push
+pipenv run pytest -q
 ```
 
-* If you created a separate feature branch, remember to open a PR on main and merge.
+Or, with the local virtual environment:
 
-### Task 4: Document and Maintain
+```bash
+.venv/bin/python -m pytest -q
+```
 
-Optional Best Practice documentation steps:
-* Add comments to the code to explain purpose and logic, clarifying intent and functionality of your code to other developers.
-* Update README text to reflect the functionality of the application following https://makeareadme.com. 
-  * Add screenshot of completed work included in Markdown in README.
-* Delete any stale branches on GitHub
-* Remove unnecessary/commented out code
-* If needed, update git ignore to remove sensitive data
+Tests use isolated in-memory SQLite databases. Coverage includes defaults,
+custom page sizes, partial and out-of-range pages, empty catalogs, invalid
+parameters, page-size limits, ordering, independent application instances,
+database initialization, and safe seeder imports.
 
-## Submit Solution
+## Schema changes
 
-CodeGrade will use the same test suite as the test suite included.
+Flask-Migrate remains available for future schema changes. This lab does not
+ship a migration history. To start tracking migrations, run from `server/`:
 
-Once all tests are passing, commit and push your work using `git` to submit to CodeGrade through Canvas.
+```bash
+pipenv run flask --app app db init
+pipenv run flask --app app db migrate -m "Initial schema"
+pipenv run flask --app app db upgrade
+```
+
+Generate the initial migration against an empty database so it captures the
+schema. Use migrations for subsequent schema changes; `init-db` only creates
+missing tables.
+
+## Lab submission
+
+After reviewing and testing your changes, commit and push them to your course
+repository to submit through Canvas/CodeGrade.
